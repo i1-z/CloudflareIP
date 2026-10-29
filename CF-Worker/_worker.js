@@ -26,7 +26,7 @@ export default {
             // 保留原本的纯文本 /sub 路径，方便工具批量提取
             return new Response(`部署成功！\n\n你的UUID: ${我的VL密钥}\n你的部署域名：${部署域名}\n你的反代ip：${反代IP}\n\n默认节点：\nvless://${我的VL密钥}@${部署域名}:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#${部署域名}`, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
         } else {
-            // 【核心改动】非 /sub 路径时，直接返回一个可以输入IP并转化为节点的 HTML 可视化网页
+            // 返回带输入框的可视化 HTML 网页
             const html网页 = `
             <!DOCTYPE html>
             <html lang="zh-CN">
@@ -105,7 +105,6 @@ export default {
   }
 };
 
-// 保持底层原有的代理传输管道代码完全不动...
 async function 启动传输管道(WS接口, TCP接口) {
   let 识别地址类型, 访问地址, 地址长度, 首包数据 = false, 首包处理完成 = null, 传输数据, 读取数据, 传输队列 = Promise.resolve();
   try {
