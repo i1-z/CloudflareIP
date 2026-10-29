@@ -1,8 +1,5 @@
-//推荐使用Pages上传部署（如需wokers部署或反复部署就删除默认节点代码），无需自定义域名而且稳定
-//默认UUID：04c808e2-0b59-47b0-a54b-32fc7ef1c902 建议部署时修改
-//默认反代IP：proxyip.cmliussss.net 无特殊要求无须修改
-//部署后用手搓CF节点生成器(https://sub.cndyw.ggff.net/)生成节点导入到v2ray或karing中使用
-//默认节点显示路径：https://部署域名/sub
+// 默认UUID：04c808e2-0b59-47b0-a54b-32fc7ef1c902 建议部署时修改
+// 默认反代IP：proxyip.cmliussss.net 无特殊要求无须修改
 
 import { connect } from 'cloudflare:sockets';
 
@@ -23,32 +20,92 @@ export default {
         const 部署域名 = 请求URL.hostname;
         const 请求路径 = 请求URL.pathname;
 
-        // 定义节点信息显示路径
         const 节点路径 = '/sub';
 
         if (请求路径 === 节点路径) {
-            return new Response(`部署成功！
-
-   你的UUID: ${我的VL密钥}
-   你的部署域名：${部署域名}
-   你的反代ip：${反代IP}
-
-默认节点：
-vless://${我的VL密钥}@${部署域名}:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#${部署域名}
-vless://${我的VL密钥}@108.162.192.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#sg 新加坡 SG
-vless://${我的VL密钥}@108.162.198.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#jp 日本 JP
-vless://${我的VL密钥}@104.18.0.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#us 美国 US
-vless://${我的VL密钥}@104.26.0.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#de 德国 DE
-vless://${我的VL密钥}@188.114.96.0:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#nl 荷兰 NL
-
-更多节点使用手搓节点生成器： http://ip.cloudip.ggff.net`, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+            // 保留原本的纯文本 /sub 路径，方便工具批量提取
+            return new Response(`部署成功！\n\n你的UUID: ${我的VL密钥}\n你的部署域名：${部署域名}\n你的反代ip：${反代IP}\n\n默认节点：\nvless://${我的VL密钥}@${部署域名}:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#${部署域名}`, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
         } else {
-            // 其他路径返回404响应
-            return new Response('部署成功，使用你的路径查看节点信息！', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+            // 【核心改动】非 /sub 路径时，直接返回一个可以输入IP并转化为节点的 HTML 可视化网页
+            const html网页 = `
+            <!DOCTYPE html>
+            <html lang="zh-CN">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>CF 节点快速生成器</title>
+                <style>
+                    body { font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f7f6; padding: 20px; display: flex; justify-content: center; }
+                    .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); width: 100%; max-width: 500px; }
+                    h2 { margin-top: 0; color: #333; font-size: 22px; text-align: center; }
+                    .info { font-size: 13px; color: #666; background: #f9f9f9; padding: 10px; border-radius: 6px; margin-bottom: 20px; line-height: 1.5; border-left: 4px solid #007bff; }
+                    label { display: block; margin-bottom: 8px; font-weight: bold; color: #444; font-size: 14px; }
+                    input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; margin-bottom: 20px; }
+                    button { width: 100%; background: #007bff; color: white; border: none; padding: 12px; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; }
+                    button:hover { background: #0056b3; }
+                    .result-box { margin-top: 25px; display: none; }
+                    textarea { width: 100%; height: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-family: monospace; font-size: 12px; background: #fafafa; resize: none; }
+                    .copy-btn { background: #28a745; margin-top: 8px; font-size: 14px; padding: 8px; }
+                    .copy-btn:hover { background: #218838; }
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h2>CF 节点在线转换器</h2>
+                    <div class="info">
+                        <strong>当前部署配置：</strong><br>
+                        域名：${部署域名}<br>
+                        UUID：${我的VL密钥}
+                    </div>
+                    
+                    <label for="ipInput">输入你的优选 IP / 反代 IP</label>
+                    <input type="text" id="ipInput" placeholder="例如：104.18.0.0 或 proxyip.cmliussss.net" value="${反代IP}">
+                    
+                    <button onclick="generateNode()">⚡ 一键转化 VPN 节点</button>
+                    
+                    <div class="result-box" id="resultBox">
+                        <label>生成的 vless:// 链接</label>
+                        <textarea id="resultUrl" readonly></textarea>
+                        <button class="copy-btn" id="copyBtn" onclick="copyLink()">📋 复制节点链接</button>
+                    </div>
+                </div>
+
+                <script>
+                    function generateNode() {
+                        const inputIp = document.getElementById('ipInput').value.trim();
+                        if(!inputIp) { alert('请输入有效的IP后再试！'); return; }
+                        
+                        const uuid = "${我的VL密钥}";
+                        const host = "${部署域名}";
+                        
+                        // 动态拼装符合格式要求的 vless 链接
+                        const vlessLink = "vless://" + uuid + "@" + inputIp + ":443?encryption=none&security=tls&sni=" + host + "&fp=random&type=ws&host=" + host + "&path=pyip%3D" + inputIp + "#" + inputIp;
+                        
+                        document.getElementById('resultUrl').value = vlessLink;
+                        document.getElementById('resultBox').style.display = 'block';
+                        document.getElementById('copyBtn').innerText = '📋 复制节点链接';
+                    }
+
+                    function copyLink() {
+                        const textarea = document.getElementById('resultUrl');
+                        textarea.select();
+                        document.execCommand('copy');
+                        
+                        const copyBtn = document.getElementById('copyBtn');
+                        copyBtn.innerText = '✅ 复制成功！';
+                        setTimeout(() => { copyBtn.innerText = '📋 复制节点链接'; }, 2000);
+                    }
+                </script>
+            </body>
+            </html>
+            `;
+            return new Response(html网页, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
         }
     }
   }
 };
+
+// 保持底层原有的代理传输管道代码完全不动...
 async function 启动传输管道(WS接口, TCP接口) {
   let 识别地址类型, 访问地址, 地址长度, 首包数据 = false, 首包处理完成 = null, 传输数据, 读取数据, 传输队列 = Promise.resolve();
   try {
