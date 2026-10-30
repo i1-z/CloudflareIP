@@ -7,26 +7,47 @@ let 我的VL密钥 = '04c808e2-0b59-47b0-a54b-32fc7ef1c902';//UUID
 let 反代IP = 'proxyip.cmliussss.net'; //反代IP
 
 export default {
-  async fetch(访问请求) {
+  async fetch(访问请求, 环境) {
+    const 访问路径URL = new URL(访问请求.url);
+    const KV对象 = 环境.try; // 绑定名为 try 的 KV 空间
+
+    // 优先从 KV 空间读取自定义的反代IP或配置
+    if (KV对象) {
+      try {
+        const KV中的IP = await KV对象.get('PROXY_IP');
+        if (KV中的IP) 反代IP = KV中的IP.trim();
+      } catch (e) {}
+    }
+
     if (访问请求.headers.get('Upgrade') === 'websocket') {
       const 读取路径 = decodeURIComponent(访问请求.url.replace(/^https?:\/\/[^/]+/, ''));
       反代IP = 读取路径.match(/ip=([^&]+)/)?.[1] || 反代IP;
       const [客户端, WS接口] = Object.values(new WebSocketPair());
       WS接口.accept();
-      启动传输管道(WS接口);
+      启动传输管道(WS接口, null, 反代IP);
       return new Response(null, { status: 101, webSocket: 客户端 });
     } else {
-        const 请求URL = new URL(访问请求.url);
-        const 部署域名 = 请求URL.hostname;
-        const 请求路径 = 请求URL.pathname;
+        const 部署域名 = 访问路径URL.hostname;
+        const 请求路径 = 访问路径URL.pathname;
 
         const 节点路径 = '/sub';
+        const 编辑路径 = '/edit';
+
+        if (请求路径 === 编辑路径) {
+            if (!KV对象) return new Response('未绑定名为 "try" 的 KV 命名空间', { status: 400 });
+            if (访问请求.method === 'POST') {
+                const 新IP = await 访问请求.text();
+                await KV对象.put('PROXY_IP', 新IP);
+                return new Response('保存成功！反代IP已更新。', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+            }
+            const 当前缓存IP = await KV对象.get('PROXY_IP') || 反代IP;
+            const 编辑网页 = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>KV 配置管理</title><style>body{max-width:600px;margin:40px auto;font-family:sans-serif;padding:0 20px}input{width:100%;padding:10px;margin:10px 0;box-sizing:border-box}button{padding:10px 20px;background:#007bff;color:#fff;border:none;border-radius:4px;cursor:pointer}</style></head><body><h3>KV 空间 (try) - 反代 IP 设置</h3><p>在此处修改并持久化保存你的反代 IP：</p><input type="text" id="ip" value="${当前缓存IP}"><br><button onclick="fetch(location.href,{method:'POST',body:document.getElementById('ip').value}).then(r=>r.text()).then(alert)">保存修改</button></body></html>`;
+            return new Response(编辑网页, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+        }
 
         if (请求路径 === 节点路径) {
-            // 保留原本的纯文本 /sub 路径，方便工具批量提取
             return new Response(`部署成功！\n\n你的UUID: ${我的VL密钥}\n你的部署域名：${部署域名}\n你的反代ip：${反代IP}\n\n默认节点：\nvless://${我的VL密钥}@${部署域名}:443?encryption=none&security=tls&sni=${部署域名}&fp=random&type=ws&host=${部署域名}&path=pyip%3D${反代IP}#${部署域名}`, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
         } else {
-            // 返回带输入框的可视化 HTML 网页
             const html网页 = `
             <!DOCTYPE html>
             <html lang="zh-CN">
@@ -47,6 +68,7 @@ export default {
                     textarea { width: 100%; height: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-family: monospace; font-size: 12px; background: #fafafa; resize: none; }
                     .copy-btn { background: #28a745; margin-top: 8px; font-size: 14px; padding: 8px; }
                     .copy-btn:hover { background: #218838; }
+                    .edit-link { display: block; text-align: center; margin-top: 15px; font-size: 13px; color: #007bff; text-decoration: none; }
                 </style>
             </head>
             <body>
@@ -68,6 +90,7 @@ export default {
                         <textarea id="resultUrl" readonly></textarea>
                         <button class="copy-btn" id="copyBtn" onclick="copyLink()">📋 复制节点链接</button>
                     </div>
+                    <a href="/edit" class="edit-link" target="_blank">📝 进入 KV 空间配置后台 (/edit)</a>
                 </div>
 
                 <script>
@@ -78,7 +101,6 @@ export default {
                         const uuid = "${我的VL密钥}";
                         const host = "${部署域名}";
                         
-                        // 动态拼装符合格式要求的 vless 链接
                         const vlessLink = "vless://" + uuid + "@" + inputIp + ":443?encryption=none&security=tls&sni=" + host + "&fp=random&type=ws&host=" + host + "&path=pyip%3D" + inputIp + "#" + inputIp;
                         
                         document.getElementById('resultUrl').value = vlessLink;
@@ -105,7 +127,7 @@ export default {
   }
 };
 
-async function 启动传输管道(WS接口, TCP接口) {
+async function 启动传输管道(WS接口, TCP接口, 当前反代IP) {
   let 识别地址类型, 访问地址, 地址长度, 首包数据 = false, 首包处理完成 = null, 传输数据, 读取数据, 传输队列 = Promise.resolve();
   try {
     WS接口.addEventListener('message', async event => {
@@ -157,8 +179,8 @@ async function 启动传输管道(WS接口, TCP接口) {
         }
         await TCP接口.opened;
       } catch {
-        if (!反代IP) throw new Error('直连失败且未配置反代IP');
-        const [反代IP地址, 反代IP端口 = 443] = 反代IP.split(':');
+        if (!当前反代IP) throw new Error('直连失败且未配置反代IP');
+        const [反代IP地址, 反代IP端口 = 443] = 当前反代IP.split(':');
         TCP接口 = connect({ hostname: 反代IP地址, port: Number(反代IP端口) });
         await TCP接口.opened;
       }
